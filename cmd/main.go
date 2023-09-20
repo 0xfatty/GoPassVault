@@ -6,10 +6,7 @@ import (
 )
 
 func main() {
-	v, err := vault.LoadOrCreateVault("vault.dat")
-	if err != nil {
-		panic(err)
-	}
-
+	v := vault.NewVault("vault.txt")
+	v.Load() // Load from disk
 	ui.ShowUI(v)
 }

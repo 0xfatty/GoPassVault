@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/0xfatty/GoPassVault/pkg/vault"
 	"github.com/gotk3/gotk3/gtk"
@@ -24,60 +25,89 @@ func ShowUI(v *vault.Vault) {
 	}
 	win.Add(grid)
 
+	// Check if master password is set
+	if !v.IsMasterPasswordSet() {
+		dialog := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_INFO, gtk.BUTTONS_OK_CANCEL, "Set your master password")
+		dialog.SetTitle("First-time Setup")
+
+		entry, err := gtk.EntryNew()
+		if err != nil {
+			log.Fatal("Unable to create the entry:", err)
+		}
+		entry.SetVisibility(false)
+
+		contentArea, err := dialog.GetContentArea()
+		if err != nil {
+			log.Fatal("Unable to get content area:", err)
+		}
+
+		contentArea.Add(entry)
+		dialog.ShowAll()
+
+		response := dialog.Run()
+
+		if response == gtk.RESPONSE_OK {
+			masterPassword, err := entry.GetText()
+			if err != nil {
+				log.Fatal("Unable to get text:", err)
+			}
+			v.SetMasterPassword(masterPassword)
+		}
+		dialog.Destroy()
+
+		if response != gtk.RESPONSE_OK {
+			return
+		}
+	}
+
 	masterPasswordEntry, _ := gtk.EntryNew()
 	masterPasswordEntry.SetPlaceholderText("Master Password")
-	grid.Add(masterPasswordEntry)
+	grid.Attach(masterPasswordEntry, 0, 0, 2, 1)
 
 	serviceEntry, _ := gtk.EntryNew()
 	serviceEntry.SetPlaceholderText("Service")
-	grid.Add(serviceEntry)
+	grid.Attach(serviceEntry, 0, 1, 1, 1)
 
 	passwordEntry, _ := gtk.EntryNew()
 	passwordEntry.SetPlaceholderText("Password")
-	grid.Add(passwordEntry)
+	grid.Attach(passwordEntry, 1, 1, 1, 1)
 
-	textView, _ := gtk.TextViewNew()
-	grid.Attach(textView, 0, 3, 2, 1)
+	addButton, _ := gtk.ButtonNewWithLabel("Add")
+	grid.Attach(addButton, 0, 2, 1, 1)
 
-	saveButton, _ := gtk.ButtonNewWithLabel("Save")
-	saveButton.Connect("clicked", func() {
+	getButton, _ := gtk.ButtonNewWithLabel("Get")
+	grid.Attach(getButton, 1, 2, 1, 1)
+
+	addButton.Connect("clicked", func() {
 		masterPassword, _ := masterPasswordEntry.GetText()
+		if !v.CheckMasterPassword(masterPassword) {
+			fmt.Println("Master password incorrect")
+			return
+		}
+
 		service, _ := serviceEntry.GetText()
 		password, _ := passwordEntry.GetText()
 
-		// Implement validation and saving logic
-		// Update textView with result or error message
-		text, _ := textView.GetBuffer()
-		if v.CheckMasterPassword(masterPassword) {
-			v.AddEntry(service, password)
-			v.Save()
-			text.SetText("Password saved successfully.")
-		} else {
-			text.SetText("Invalid master password.")
-		}
+		v.AddEntry(service, password)
+		v.Save()
 	})
-	grid.Attach(saveButton, 0, 4, 1, 1)
 
-	retrieveButton, _ := gtk.ButtonNewWithLabel("Retrieve")
-	retrieveButton.Connect("clicked", func() {
+	getButton.Connect("clicked", func() {
 		masterPassword, _ := masterPasswordEntry.GetText()
-		service, _ := serviceEntry.GetText()
-
-		// Implement validation and retrieval logic
-		// Update textView with result or error message
-		text, _ := textView.GetBuffer()
-		if v.CheckMasterPassword(masterPassword) {
-			password, err := v.GetEntry(service)
-			if err != nil {
-				text.SetText("Error retrieving password.")
-			} else {
-				text.SetText(fmt.Sprintf("Password for %s is %s.", service, password))
-			}
-		} else {
-			text.SetText("Invalid master password.")
+		if !v.CheckMasterPassword(masterPassword) {
+			fmt.Println("Master password incorrect")
+			return
 		}
+
+		service, _ := serviceEntry.GetText()
+		password, err := v.GetEntry(service)
+		if err != nil {
+			fmt.Println("Service not found")
+			return
+		}
+
+		passwordEntry.SetText(password)
 	})
-	grid.Attach(retrieveButton, 1, 4, 1, 1)
 
 	win.Connect("destroy", func() {
 		gtk.MainQuit()
